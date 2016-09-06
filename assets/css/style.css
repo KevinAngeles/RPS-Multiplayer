@@ -1,0 +1,22 @@
+.btnRps{
+    border: none;
+    cursor:pointer;
+    height: 100px;
+    width: 100px;
+}
+#btnRock{
+    background: url(../images/rock.jpg) no-repeat;
+    background-size: 100px 100px;
+}
+#btnPaper{
+    background: url(../images/paper.jpg) no-repeat;
+    background-size: 100px 100px;
+}
+#btnScissors{
+    background: url(../images/scissors.png) no-repeat;
+    background-size: 100px 100px;
+}
+#selectedList div, #waitList div{
+    display: inline-block;
+    margin: 10px;
+}
