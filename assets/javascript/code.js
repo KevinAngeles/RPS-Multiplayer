@@ -11,6 +11,7 @@ $(document).on("ready",function(){
 	// Get a reference to the users data in Firebase.
 	var userListRef = db.ref("selectedUsers");
 	var waitListRef = db.ref("waitListUsers");
+	var chatRef = db.ref("chat");
 	
 	/*User Data*/
 	var name = "";
@@ -21,6 +22,7 @@ $(document).on("ready",function(){
 	var myUserRef;//ref to user data in Firebase
 	var myKey = "";
 	/*End User Data*/
+	var chatMsg= "";
 	var score1 = 0;
 	var score2 = 0;
 	//Waitlist Users counter
@@ -43,39 +45,68 @@ $(document).on("ready",function(){
 	});
 	/*End Users Selected*/
 	
+	chatRef.on("value", function(snapshot){
+		if(snapshot.hasChild("msg"))
+			chatMsg = snapshot.val().msg;
+	});
+
+	$("#sendChat").prop("disabled",true);
+	$("#inputChat").prop("disabled",true);
+	
 	$("#sub").on("click",function(ev){
 		ev.preventDefault();
 		
 		name = $("#inputUserName").val().trim();
-
-		if(selectedUsersCounter < 2)
+		if( name !== "" )
 		{
-			currentStatus = "selected";
-			// Generate a reference to a new location for my user with push.
-			myUserRef = userListRef.push();
+			if(selectedUsersCounter < 2)
+			{
+				currentStatus = "selected";
+				// Generate a reference to a new location for my user with push.
+				myUserRef = userListRef.push();
+			}
+			else
+			{
+				currentStatus = "waitlist";
+				// Generate a reference to a new location for my user with push.
+				myUserRef = waitListRef.push();
+			}
+			myKey = myUserRef.key;
+
+			// Get a reference to my own presence status.
+			var connectedRef = db.ref(".info/connected");
+			connectedRef.on("value", function(isOnline) {
+				if (isOnline.val()) {
+					// If I lose internet connection, remove me from the list.
+					myUserRef.onDisconnect().remove();
+				}
+				// Set initial status.
+				setUserStatus(currentStatus);
+				$(ev.currentTarget).prop("disabled",true);
+				$("#inputUserName").prop("disabled",true);
+				$("#sendChat").prop("disabled",false);
+				$("#inputChat").prop("disabled",false);
+
+			});
 		}
 		else
 		{
-			currentStatus = "waitlist";
-			// Generate a reference to a new location for my user with push.
-			myUserRef = waitListRef.push();
+			$('#myModal').modal('show');
 		}
-		myKey = myUserRef.key;
-
-		// Get a reference to my own presence status.
-		var connectedRef = db.ref(".info/connected");
-		connectedRef.on("value", function(isOnline) {
-			if (isOnline.val()) {
-				// If I lose internet connection, remove me from the list.
-				myUserRef.onDisconnect().remove();
-			}
-			// Set initial status.
-			setUserStatus(currentStatus);
-			$(ev.currentTarget).prop("disabled",true);
-			$("#inputUserName").prop("disabled",true);
-		});
 	});
 
+	$("#sendChat").on("click",function(ev){
+		ev.preventDefault();
+
+		var txt = $.trim($("#inputChat").val());
+	    
+	    if(chatMsg !== "") chatMsg = chatMsg + "\n";
+	    chatMsg = chatMsg + name + ": " + txt;
+		//$("#chat").val(chatMsg);
+		console.log("chat message is "+chatMsg);
+		chatRef.set({msg:chatMsg});
+		$("#inputChat").val("");
+	});
 	$(".btnRps").on("click",function(ev){
 		ev.preventDefault();
 		
@@ -84,7 +115,7 @@ $(document).on("ready",function(){
 			var rps = $(ev.currentTarget).data("val");
 			var rndVal = Date.now()+Math.floor(Math.random() * 1500);//used to force a child_added event even if the user had the same selection.
 			myUserRef.update({ turn: turn, rpsSelected: rps, rnd: rndVal });
-			$("#game").append($("<div>"+name+" selected "+rps+"</div>"));
+			$("#game").append($("<div>" + name + " selected " + rps + "</div>"));
 			iPlayed = true;
 			if(opponentPlayed)
 			{
@@ -104,7 +135,7 @@ $(document).on("ready",function(){
 						var playerSelection2 = player2.rpsSelected;
 						var res = "";
 						//check who won
-						res = pname1 + " selected "+playerSelection1+" and "+pname2+" selected "+playerSelection2+" so ";
+						res = pname1 + " selected " + playerSelection1 + " and " + pname2 + " selected " + playerSelection2 + " so ";
 						if(playerSelection1===playerSelection2)
 						{
 							res = res + " It is a tie!";
@@ -113,13 +144,13 @@ $(document).on("ready",function(){
 						{
 							res = res + pname1 + " wins!!!";
 							score1 = score1 + 1;
-							$("#"+pkey1+" .userScore").html(score1);
+							$("#" + pkey1 + " .userScore").html(score1);
 						}
 						else
 						{
 							res = res + pname2 + " wins!!!";
 							score2 = score2 + 1;
-							$("#"+pkey2+" .userScore").html(score2);
+							$("#" + pkey2 + " .userScore").html(score2);
 						}
 					
 						//set results and won to battle result
@@ -232,6 +263,16 @@ $(document).on("ready",function(){
 				}
 			}
 		}
+	});
+
+	chatRef.on("child_added", function(snapshot) {
+		var msgHistory = snapshot.val();
+		$("#chat").val(msgHistory);
+	});
+
+	chatRef.on("child_changed", function(snapshot) {
+		var msgHistory = snapshot.val();
+		$("#chat").val(msgHistory);
 	});
 
 });
