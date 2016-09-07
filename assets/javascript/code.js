@@ -13,6 +13,7 @@ $(document).on("ready",function(){
 	var userListRef = db.ref("selectedUsers");
 	var waitListRef = db.ref("waitListUsers");
 	var chatRef = db.ref("chat");
+	var turnRef = db.ref("turn");
 	
 	/*User Data*/
 	var name = "";
@@ -22,6 +23,7 @@ $(document).on("ready",function(){
 	var iPlayed = false;
 	var myUserRef;//ref to user data in Firebase
 	var myKey = "";
+	var gameStarted = false;
 	/*End User Data*/
 	var chatMsg= "";
 	var score1 = 0;
@@ -42,6 +44,11 @@ $(document).on("ready",function(){
 		if( u.val() !== null)
 		{
 			selectedUsersCounter = Object.keys(u.val()).length;
+			if( selectedUsersCounter === 2 && currentStatus === "selected" && !gameStarted )
+			{
+				$("#battleResult").html("Click on a picture to play.");
+				gameStarted = true;
+			}
 		}
 	});
 	/*End Users Selected*/
@@ -51,17 +58,25 @@ $(document).on("ready",function(){
 		{
 			chatMsg = snapshot.val().msg;
 			var msgHistory = snapshot.val();
-			$("#chat").val(chatMsg);
+			$("#chat").html(chatMsg);
 			if(name !== "")
-				chatRef.onDisconnect().set({msg:chatMsg+"\n"+name+" left the game."});
+				chatRef.onDisconnect().set({msg:chatMsg+"<p>"+name+" left the game.</p>"});
 
 			//Keep chat scrolled to the bottom
-			document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+			$("#chat").animate({"scrollTop": $('#chat')[0].scrollHeight}, "slow");
+			if(myKey !== "")
+				$("."+myKey).css({"color":"blue","font-weight": "bold"});
 		}
 	});
 
+	turnRef.on("value", function(snapshot){
+		if(snapshot.val() !== null)
+			turn = parseInt(snapshot.val());
+		$("#turn").html(turn);
+	});
 	$("#sendChat").prop("disabled",true);
 	$("#inputChat").prop("disabled",true);
+	$(".btnRps").prop("disabled",true);
 	
 	$("#sub").on("click",function(ev){
 		ev.preventDefault();
@@ -72,6 +87,8 @@ $(document).on("ready",function(){
 			if(selectedUsersCounter < 2)
 			{
 				currentStatus = "selected";
+				if(selectedUsersCounter <= 0)
+					$("#battleResult").html("Waiting for an opponent to start the game.");
 				// Generate a reference to a new location for my user with push.
 				myUserRef = userListRef.push();
 			}
@@ -90,6 +107,8 @@ $(document).on("ready",function(){
 				{
 					// If I lose internet connection, remove me from the list.
 					myUserRef.onDisconnect().remove();
+					//Reset turn to 0 on disconnect
+					turnRef.onDisconnect().set(0);
 				}
 				// Set initial status.
 				setUserStatus(currentStatus);
@@ -97,7 +116,7 @@ $(document).on("ready",function(){
 				$("#inputUserName").prop("disabled",true);
 				$("#sendChat").prop("disabled",false);
 				$("#inputChat").prop("disabled",false);
-
+				$(".btnRps").prop("disabled",false);
 			});
 		}
 		else
@@ -111,9 +130,8 @@ $(document).on("ready",function(){
 
 		var txt = $.trim($("#inputChat").val());
 	    
-	    if(chatMsg !== "") chatMsg = chatMsg + "\n";
-	    chatMsg = chatMsg + name + ": " + txt;
-		console.log("chat message is "+chatMsg);
+	    if(chatMsg !== "") chatMsg = chatMsg + "<p>";
+	    chatMsg = chatMsg + "<span class='"+myKey+"'>" + name + ": " + txt+"</span></p>";
 		chatRef.set({msg:chatMsg});
 		$("#inputChat").val("");
 	});
@@ -122,9 +140,8 @@ $(document).on("ready",function(){
 		{
 			var txt = $.trim($("#inputChat").val());
 	    
-			if(chatMsg !== "") chatMsg = chatMsg + "\n";
-			chatMsg = chatMsg + name + ": " + txt;
-			console.log("chat message is "+chatMsg);
+			if(chatMsg !== "") chatMsg = chatMsg + "<p>";
+			chatMsg = chatMsg + "<span class='"+myKey+"'>"+name + ": " + txt+"</span></p>";
 			chatRef.set({msg:chatMsg});
 			$("#inputChat").val("");
 		}
@@ -132,67 +149,89 @@ $(document).on("ready",function(){
 	$(".btnRps").on("click",function(ev){
 		ev.preventDefault();
 		
-		if( (selectedUsersCounter === 2) && (!iPlayed) && (currentStatus === "selected") )
+		if( currentStatus === "selected" )
 		{
-			var rps = $(ev.currentTarget).data("val");
-			var rndVal = Date.now()+Math.floor(Math.random() * 1500);//used to force a child_added event even if the user had the same selection.
-			myUserRef.update({ turn: turn, rpsSelected: rps, rnd: rndVal });
-			$("#game").append($("<div>" + name + " selected " + rps + "</div>"));
-			iPlayed = true;
-			if(opponentPlayed)
+			if( selectedUsersCounter === 2 )
 			{
-				userListRef.once("value", function(u) {
-					if( u.val() !== null)
+				if( !iPlayed )
+				{
+					var rps = $(ev.currentTarget).data("val");
+					var rndVal = Date.now()+Math.floor(Math.random() * 1500);//used to force a child_added event even if the user had the same selection.
+					myUserRef.update({ turn: turn, rpsSelected: rps, rnd: rndVal });
+					$("#battleResult").html($("<div>" + name + " selected " + rps + "</div>"));
+					iPlayed = true;
+					if(opponentPlayed)
 					{
-						var obj = u.val();
-						//get the result of player 1
-						var pkey1 = Object.keys(obj)[0];
-						var player1 = obj[pkey1];
-						var pname1 = player1.name;
-						var playerSelection1 = player1.rpsSelected;
-						//get the result of player 2
-						var pkey2 = Object.keys(obj)[1];
-						var player2 = obj[pkey2];
-						var pname2 = player2.name;
-						var playerSelection2 = player2.rpsSelected;
-						var res = "";
-						//check who won
-						res = pname1 + " selected " + playerSelection1 + " and " + pname2 + " selected " + playerSelection2 + " so ";
-						if(playerSelection1===playerSelection2)
-						{
-							res = res + " It is a tie!";
-						}
-						else if(playerSelection1 === "rock" && playerSelection2 === "scissors" || playerSelection1 === "paper" && playerSelection2 === "rock" || playerSelection1 === "scissors" && playerSelection2 === "paper" )
-						{
-							res = res + pname1 + " wins!!!";
-							score1 = score1 + 1;
-							$("#" + pkey1 + " .userScore").html(score1);
-						}
-						else
-						{
-							res = res + pname2 + " wins!!!";
-							score2 = score2 + 1;
-							$("#" + pkey2 + " .userScore").html(score2);
-						}
-					
-						//set results and won to battle result
-						$("#battleResult").html(res);
-						iPlayed = false;
-						opponentPlayed = false;
-						$("#game").html("");
-						turn=turn+1;
-					}
-				});
+						userListRef.once("value", function(u) {
+							if( u.val() !== null)
+							{
+								var obj = u.val();
+								//get the result of player 1
+								var pkey1 = Object.keys(obj)[0];
+								var player1 = obj[pkey1];
+								var pname1 = player1.name;
+								var playerSelection1 = player1.rpsSelected;
+								//get the result of player 2
+								var pkey2 = Object.keys(obj)[1];
+								var player2 = obj[pkey2];
+								var pname2 = player2.name;
+								var playerSelection2 = player2.rpsSelected;
+								var res = "";
+								//check who won
+								if(pkey1 === myKey)
+								{
+									res = "<span class='"+myKey+"'>"+pname1 + " selected "+playerSelection1+"</span> and "+pname2+" selected "+playerSelection2+" so ";
+								}
+								else
+								{
+									res = pname1 + " selected "+playerSelection1+" and <span class='"+myKey+"'>"+pname2+" selected "+playerSelection2+"</span> so ";
+								}
+
+								if(playerSelection1===playerSelection2)
+								{
+									res = res + " It is a tie!";
+								}
+								else if(playerSelection1 === "rock" && playerSelection2 === "scissors" || playerSelection1 === "paper" && playerSelection2 === "rock" || playerSelection1 === "scissors" && playerSelection2 === "paper" )
+								{
+									if(pkey1 === myKey)
+										res=res+"<span class='"+pkey1+"'>"+pname1 + " wins!!!</span>"
+									else
+										res = res + pname1 + " wins!!!";
+									score1 = score1 + 1;
+									$("#"+pkey1+" .userScore").html(score1);
+								}
+								else
+								{
+									if(pkey2 === myKey)
+										res=res+"<span class='"+pkey2+"'>"+pname2 + " wins!!!</span>"
+									else
+										res = res + pname2 + " wins!!!";
+									score2 = score2 + 1;
+									$("#"+pkey2+" .userScore").html(score2);
+								}
+								//Set results and won to battle result
+								$("#battleResult").html(res);
+								if(myKey !== "")
+									$("."+myKey).css({"color":"blue","font-weight": "bold"});	iPlayed = false;
+								opponentPlayed = false;
+							}
+						});
+					}		
+				}
+				else
+				{
+					$("#battleResult").html("Waiting for opponent choice.");
+				}
+			}
+			else
+			{
+				$("#battleResult").html("Waiting for an opponent to start the game.");
 			}
 		}
-		else
+		else if(currentStatus === "waitlist")
 		{
-			if(currentStatus === "waitlist")
-				console.log("You are in the wait list!!");
-			else
-				console.log("waiting for an opponent");
+			$("#battleResult").html("You are in the wait list!!");
 		}
-
 	});
 
 	function setUserStatus(status)
@@ -222,7 +261,12 @@ $(document).on("ready",function(){
 		$("#" + snapshot.key).remove();
 		selectedUsersCounter--;
 		if(selectedUsersCounter<2)
+		{
+			//change turn to 0
 			console.log("possible change to 'selected'");//change this later / move an user from waitlist to selected list
+		}
+		turn = 0;
+		$("#battleResult").html("");
 	});
 
 	waitListRef.on("child_removed", function(snapshot) {
@@ -230,7 +274,6 @@ $(document).on("ready",function(){
 		waitListUsersCounter--;
 	});
 
-	// Update our GUI to change a user"s status.
 	userListRef.on("child_changed", function(snapshot) {
 		var user = snapshot.val();
 		
@@ -238,7 +281,8 @@ $(document).on("ready",function(){
 		{
 			if(user.hasOwnProperty("rpsSelected") && user.rpsSelected !== "")
 			{
-				$("#game").append($("<div>"+user.name+" made a selection. </div>"));
+				$("#battleResult").html($("<div>"+user.name+" made a selection. </div>"));
+				console.log("opponent selected something");
 				opponentPlayed = true;
 				if(iPlayed)
 				{
@@ -257,44 +301,49 @@ $(document).on("ready",function(){
 							var pname2 = player2.name;
 							var playerSelection2 = player2.rpsSelected;
 							//check who won
-							res = pname1 + " selected "+playerSelection1+" and "+pname2+" selected "+playerSelection2+" so ";
+							if(pkey1 === myKey)
+							{
+								res = "<span class='"+myKey+"'>"+pname1 + " selected "+playerSelection1+"</span> and "+pname2+" selected "+playerSelection2+" so ";
+							}
+							else
+							{
+								res = pname1 + " selected "+playerSelection1+" and <span class='"+myKey+"'>"+pname2+" selected "+playerSelection2+"</span> so ";
+							}
+
 							if(playerSelection1===playerSelection2)
 							{
 								res = res + " It is a tie!";
 							}
 							else if(playerSelection1 === "rock" && playerSelection2 === "scissors" || playerSelection1 === "paper" && playerSelection2 === "rock" || playerSelection1 === "scissors" && playerSelection2 === "paper" )
 							{
-								res = res + pname1 + " wins!!!";
+								if(pkey1 === myKey)
+									res=res+"<span class='"+pkey1+"'>"+pname1 + " wins!!!</span>"
+								else
+									res = res + pname1 + " wins!!!";
 								score1 = score1 + 1;
 								$("#"+pkey1+" .userScore").html(score1);
 							}
 							else
 							{
-								res = res + pname2 + " wins!!!";
+								if(pkey2 === myKey)
+									res=res+"<span class='"+pkey2+"'>"+pname2 + " wins!!!</span>"
+								else
+									res = res + pname2 + " wins!!!";
 								score2 = score2 + 1;
 								$("#"+pkey2+" .userScore").html(score2);
 							}
 							//set results and won to battle result
 							$("#battleResult").html(res);
+							if(myKey !== "")
+								$("."+myKey).css({"color":"blue","font-weight": "bold"});
 							iPlayed = false;
 							opponentPlayed = false;
-							$("#game").html("");
 							turn=turn+1;
+							turnRef.set(turn);
 						}
 					});
 				}
 			}
 		}
 	});
-	/*
-	chatRef.on("child_added", function(snapshot) {
-		var msgHistory = snapshot.val();
-		$("#chat").val(msgHistory);
-	});
-
-	chatRef.on("child_changed", function(snapshot) {
-		var msgHistory = snapshot.val();
-		$("#chat").val(msgHistory);
-	});*/
-
 });
