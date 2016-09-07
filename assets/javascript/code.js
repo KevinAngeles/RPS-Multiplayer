@@ -1,4 +1,5 @@
 $(document).on("ready",function(){
+	
 	var config = {
 			apiKey: "AIzaSyAME90fzEZTufLoGrGLJRKiXzDZiUn7W4k",
 			authDomain: "rpsgame-3782d.firebaseapp.com",
@@ -47,7 +48,16 @@ $(document).on("ready",function(){
 	
 	chatRef.on("value", function(snapshot){
 		if(snapshot.hasChild("msg"))
+		{
 			chatMsg = snapshot.val().msg;
+			var msgHistory = snapshot.val();
+			$("#chat").val(chatMsg);
+			if(name !== "")
+				chatRef.onDisconnect().set({msg:chatMsg+"\n"+name+" left the game."});
+
+			//Keep chat scrolled to the bottom
+			document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+		}
 	});
 
 	$("#sendChat").prop("disabled",true);
@@ -76,7 +86,8 @@ $(document).on("ready",function(){
 			// Get a reference to my own presence status.
 			var connectedRef = db.ref(".info/connected");
 			connectedRef.on("value", function(isOnline) {
-				if (isOnline.val()) {
+				if (isOnline.val())
+				{
 					// If I lose internet connection, remove me from the list.
 					myUserRef.onDisconnect().remove();
 				}
@@ -102,10 +113,21 @@ $(document).on("ready",function(){
 	    
 	    if(chatMsg !== "") chatMsg = chatMsg + "\n";
 	    chatMsg = chatMsg + name + ": " + txt;
-		//$("#chat").val(chatMsg);
 		console.log("chat message is "+chatMsg);
 		chatRef.set({msg:chatMsg});
 		$("#inputChat").val("");
+	});
+	$("#inputChat").keyup(function (e) {
+		if (e.which == 13)
+		{
+			var txt = $.trim($("#inputChat").val());
+	    
+			if(chatMsg !== "") chatMsg = chatMsg + "\n";
+			chatMsg = chatMsg + name + ": " + txt;
+			console.log("chat message is "+chatMsg);
+			chatRef.set({msg:chatMsg});
+			$("#inputChat").val("");
+		}
 	});
 	$(".btnRps").on("click",function(ev){
 		ev.preventDefault();
@@ -264,7 +286,7 @@ $(document).on("ready",function(){
 			}
 		}
 	});
-
+	/*
 	chatRef.on("child_added", function(snapshot) {
 		var msgHistory = snapshot.val();
 		$("#chat").val(msgHistory);
@@ -273,6 +295,6 @@ $(document).on("ready",function(){
 	chatRef.on("child_changed", function(snapshot) {
 		var msgHistory = snapshot.val();
 		$("#chat").val(msgHistory);
-	});
+	});*/
 
 });
