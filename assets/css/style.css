@@ -30,4 +30,5 @@
     overflow: auto;
     padding: 4px;
     resize: both;
+    min-height: 28px;
 }

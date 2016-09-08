@@ -14,6 +14,7 @@ $(document).on("ready",function(){
 	var waitListRef = db.ref("waitListUsers");
 	var chatRef = db.ref("chat");
 	var turnRef = db.ref("turn");
+	var userScoreRef = db.ref("score");
 	
 	/*User Data*/
 	var name = "";
@@ -22,12 +23,17 @@ $(document).on("ready",function(){
 	var opponentPlayed = false;
 	var iPlayed = false;
 	var myUserRef;//ref to user data in Firebase
+	var myScoreRef;
 	var myKey = "";
+	var	opponentKey = ""; 
+
 	var gameStarted = false;
 	/*End User Data*/
 	var chatMsg= "";
-	var score1 = 0;
-	var score2 = 0;
+	var playerWins = 0;
+	var playerLosses = 0;
+	var opponentWins = 0;
+	var opponentLosses = 0;
 	//Waitlist Users counter
 	var waitListUsersCounter = 0;
 	//update users in waitlist counter
@@ -43,9 +49,13 @@ $(document).on("ready",function(){
 	userListRef.on("value", function(u) {
 		if( u.val() !== null)
 		{
-			selectedUsersCounter = Object.keys(u.val()).length;
+			selectedUsersCounter = Object.keys( u.val() ).length;
 			if( selectedUsersCounter === 2 && currentStatus === "selected" && !gameStarted )
 			{
+				Object.keys( u.val() ).forEach(function(k){
+					if( myKey !== "" && k !== myKey )
+						opponentKey = k;
+				}) 
 				$("#battleResult").html("Click on a picture to play.");
 				gameStarted = true;
 			}
@@ -53,6 +63,35 @@ $(document).on("ready",function(){
 	});
 	/*End Users Selected*/
 	
+	userScoreRef.on("value", function(us) {
+		if( us.val() !== null)
+		{
+			var usrObj = us.val();
+			usrKeys = Object.keys( usrObj );
+
+			if( usrKeys.length === 2 && currentStatus === "selected" )
+			{
+				for( var i = 0; i < usrKeys.length; i++ )
+				{
+					var scr = usrObj[usrKeys[i]];
+					if( scr.key === myKey )
+					{
+						playerLosses = parseInt(scr.losses);
+						playerWins = parseInt(scr.wins);
+						$("#"+scr.key+" .userScore").html(playerWins);
+					}
+					else
+					{
+						opponentLosses = parseInt(scr.losses);
+						opponentWins = parseInt(scr.wins);
+						$("#"+scr.key+" .userScore").html(opponentWins);
+					}
+				}
+				if(myKey !== "")
+					$("."+myKey).css({"color":"blue","font-weight": "bold"});
+			}
+		}
+	});
 	chatRef.on("value", function(snapshot){
 		if(snapshot.hasChild("msg"))
 		{
@@ -91,6 +130,7 @@ $(document).on("ready",function(){
 					$("#battleResult").html("Waiting for an opponent to start the game.");
 				// Generate a reference to a new location for my user with push.
 				myUserRef = userListRef.push();
+				myScoreRef = userScoreRef.push({key:myUserRef.key,wins:playerWins,losses:playerLosses});
 			}
 			else
 			{
@@ -109,6 +149,8 @@ $(document).on("ready",function(){
 					myUserRef.onDisconnect().remove();
 					//Reset turn to 0 on disconnect
 					turnRef.onDisconnect().set(0);
+					//
+					myScoreRef.onDisconnect().remove();
 				}
 				// Set initial status.
 				setUserStatus(currentStatus);
@@ -176,44 +218,22 @@ $(document).on("ready",function(){
 								var player2 = obj[pkey2];
 								var pname2 = player2.name;
 								var playerSelection2 = player2.rpsSelected;
-								var res = "";
+								var res = {};
 								//check who won
 								if(pkey1 === myKey)
 								{
-									res = "<span class='"+myKey+"'>"+pname1 + " selected "+playerSelection1+"</span> and "+pname2+" selected "+playerSelection2+" so ";
+									res = checkResult(pkey1,pkey2,pname1,pname2,playerSelection1,playerSelection2);
 								}
 								else
 								{
-									res = pname1 + " selected "+playerSelection1+" and <span class='"+myKey+"'>"+pname2+" selected "+playerSelection2+"</span> so ";
+									res = checkResult(pkey2,pkey1,pname2,pname1,playerSelection2,playerSelection1);
 								}
 
-								if(playerSelection1===playerSelection2)
-								{
-									res = res + " It is a tie!";
-								}
-								else if(playerSelection1 === "rock" && playerSelection2 === "scissors" || playerSelection1 === "paper" && playerSelection2 === "rock" || playerSelection1 === "scissors" && playerSelection2 === "paper" )
-								{
-									if(pkey1 === myKey)
-										res=res+"<span class='"+pkey1+"'>"+pname1 + " wins!!!</span>"
-									else
-										res = res + pname1 + " wins!!!";
-									score1 = score1 + 1;
-									$("#"+pkey1+" .userScore").html(score1);
-								}
-								else
-								{
-									if(pkey2 === myKey)
-										res=res+"<span class='"+pkey2+"'>"+pname2 + " wins!!!</span>"
-									else
-										res = res + pname2 + " wins!!!";
-									score2 = score2 + 1;
-									$("#"+pkey2+" .userScore").html(score2);
-								}
-								//Set results and won to battle result
-								$("#battleResult").html(res);
-								if(myKey !== "")
-									$("."+myKey).css({"color":"blue","font-weight": "bold"});	iPlayed = false;
+								iPlayed = false;
 								opponentPlayed = false;
+								turn=turn+1;
+								turnRef.set(turn);
+
 							}
 						});
 					}		
@@ -237,7 +257,30 @@ $(document).on("ready",function(){
 	function setUserStatus(status)
 	{
 		currentStatus = status;
-		myUserRef.set({ name: name, status: status, score: 0 });
+		myUserRef.set({ name: name, status: status });
+	}
+
+	function checkResult(pk,ok,playerName,opponentName,playerChoice,opponentChoice)
+	{
+		var msg = "<span class='"+pk+"'>"+"You" + " selected "+playerChoice+"</span> and "+opponentName+" selected "+opponentChoice+" so ";
+
+		if( playerChoice === opponentChoice )
+		{
+			msg = msg + "It is a tie!";
+		}
+		else if( playerChoice === "rock" && opponentChoice === "scissors" || playerChoice === "paper" && opponentChoice === "rock" || playerChoice === "scissors" && opponentChoice === "paper" )
+		{
+			msg = msg + "<span class='" + pk + "'>" + "You" + " won!!!</span>";
+			playerWins = playerWins + 1;
+			myScoreRef.update({wins:playerWins});			 
+		}
+		else
+		{
+			msg = msg + "<span class='" + pk + "'>" + "You" + " lost!!!</span>";
+			playerLosses = playerLosses + 1;
+			myScoreRef.update({losses:playerLosses});
+		}
+		$("#battleResult").html(msg);
 	}
 
 	userListRef.on("child_added", function(snapshot) {
@@ -282,12 +325,11 @@ $(document).on("ready",function(){
 			if(user.hasOwnProperty("rpsSelected") && user.rpsSelected !== "")
 			{
 				$("#battleResult").html($("<div>"+user.name+" made a selection. </div>"));
-				console.log("opponent selected something");
 				opponentPlayed = true;
 				if(iPlayed)
 				{
 					userListRef.once("value", function(u) {
-						if( u.val() !== null)
+						if( u.val() !== null )
 						{
 							var obj = u.val();
 							//get the result of player 1
@@ -303,43 +345,17 @@ $(document).on("ready",function(){
 							//check who won
 							if(pkey1 === myKey)
 							{
-								res = "<span class='"+myKey+"'>"+pname1 + " selected "+playerSelection1+"</span> and "+pname2+" selected "+playerSelection2+" so ";
+								res = checkResult(pkey1,pkey2,pname1,pname2,playerSelection1,playerSelection2);
 							}
 							else
 							{
-								res = pname1 + " selected "+playerSelection1+" and <span class='"+myKey+"'>"+pname2+" selected "+playerSelection2+"</span> so ";
-							}
-
-							if(playerSelection1===playerSelection2)
-							{
-								res = res + " It is a tie!";
-							}
-							else if(playerSelection1 === "rock" && playerSelection2 === "scissors" || playerSelection1 === "paper" && playerSelection2 === "rock" || playerSelection1 === "scissors" && playerSelection2 === "paper" )
-							{
-								if(pkey1 === myKey)
-									res=res+"<span class='"+pkey1+"'>"+pname1 + " wins!!!</span>"
-								else
-									res = res + pname1 + " wins!!!";
-								score1 = score1 + 1;
-								$("#"+pkey1+" .userScore").html(score1);
-							}
-							else
-							{
-								if(pkey2 === myKey)
-									res=res+"<span class='"+pkey2+"'>"+pname2 + " wins!!!</span>"
-								else
-									res = res + pname2 + " wins!!!";
-								score2 = score2 + 1;
-								$("#"+pkey2+" .userScore").html(score2);
+								res = checkResult(pkey2,pkey1,pname2,pname1,playerSelection2,playerSelection1);
 							}
 							//set results and won to battle result
-							$("#battleResult").html(res);
 							if(myKey !== "")
 								$("."+myKey).css({"color":"blue","font-weight": "bold"});
 							iPlayed = false;
 							opponentPlayed = false;
-							turn=turn+1;
-							turnRef.set(turn);
 						}
 					});
 				}
